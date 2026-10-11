@@ -1,8 +1,10 @@
 import streamlit as st
 import pypdf
 from google import genai
+from gtts import gTTS
+import io
 
-# 1. Web Page Title
+# 1. Web Page Title & Config
 st.set_page_config(page_title="My First Year Chatbot", layout="centered")
 
 st.title("My First Year Chatbot")
@@ -34,10 +36,20 @@ if uploaded_file is not None and not st.session_state.pdf_text:
     except Exception as e:
         st.sidebar.error(f"Error reading PDF: {e}")
 
-# 4. Display Past Chat History (Multi-turn support)
+# Helper function to generate audio bytes for gTTS
+def text_to_audio_bytes(text):
+    tts = gTTS(text=text, lang='en')
+    audio_io = io.BytesIO()
+    tts.write_to_fp(audio_io)
+    audio_io.seek(0)
+    return audio_io
+
+# 4. Display Past Chat History (Multi-turn support with Audio)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
+        if message["role"] == "assistant" and "audio_bytes" in message:
+            st.audio(message["audio_bytes"], format="audio/mp3")
 
 # 5. User Input & Processing
 if user_query := st.chat_input("Ask a question"):
@@ -65,7 +77,6 @@ if user_query := st.chat_input("Ask a question"):
 
                 # Build conversation history string for multi-turn context
                 history_str = ""
-                # Include the last 4 messages for conversational continuity
                 for msg in st.session_state.messages[-5:-1]:
                     history_str += f"{msg['role'].capitalize()}: {msg['content']}\n"
                 
@@ -84,11 +95,19 @@ if user_query := st.chat_input("Ask a question"):
                     contents=my_prompt
                 )
                 
-                # Output and store response
+                # Output and store response with native Streamlit audio player
                 answer = response.text
+                audio_data = text_to_audio_bytes(answer)
+                
                 st.chat_message("assistant").write(answer)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
-                                
+                st.audio(audio_data, format="audio/mp3")
+                
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": answer, 
+                    "audio_bytes": audio_data
+                })
+                            
             except Exception as e:
                 error_msg = f"API Error: {e}"
                 st.chat_message("assistant").error(error_msg)
